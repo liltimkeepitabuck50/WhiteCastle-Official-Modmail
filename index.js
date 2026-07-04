@@ -236,7 +236,7 @@ client.on("messageCreate", async (message) => {
             .setTitle("Are you sure you would like to create a thread?")
             .setDescription(
                 "Creating a thread will send our moderators a ticket that will be chatted through.\n\n" +
-                "Use `!help` for staff commands."
+                "Use the Buttons Below to Open or Cancel."
             );
 
         await message.channel.send({
@@ -351,7 +351,7 @@ client.on("interactionCreate", async (interaction) => {
                     .setDescription(
                         "Your support ticket has been closed.\n\n" +
                         "A transcript has been generated and archived.\n" +
-                        "Thank you for contacting WhiteCastle Support."
+                        "Thank you for contacting WhiteCastle Support. Replying to this message will create a new thread."
                     );
                 await user.send({ embeds: [dmEmbed] });
             } catch {}
