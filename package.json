@@ -1,15 +1,14 @@
 {
-  "name": "modmail-bot",
+  "name": "whitecastle-support-system",
   "version": "1.0.0",
-  "description": "DM-based ModMail bot with Express keep-alive",
+  "description": "WhiteCastle Support Ticket System",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "build": "echo \"No build step required\""
+    "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.15.3",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2"
   }
 }
