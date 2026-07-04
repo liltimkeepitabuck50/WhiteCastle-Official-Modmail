@@ -255,6 +255,7 @@ client.on("messageCreate", async (message) => {
     }
     
 });
+
 // =========================
 // INTERACTION HANDLER
 // =========================
