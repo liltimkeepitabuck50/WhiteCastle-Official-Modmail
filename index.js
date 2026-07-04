@@ -763,3 +763,4 @@ client.on("messageCreate", async (message) => {
 client.login(process.env.TOKEN);
 
 console.log("WhiteCastle Support System — FULL FINAL BUILD LOADED");
+
