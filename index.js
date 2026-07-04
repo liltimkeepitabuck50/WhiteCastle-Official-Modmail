@@ -1,11 +1,9 @@
 // =========================
-// WHITECASTLE SUPPORT SYSTEM — FINAL MERGED INDEX.JS
+// WHITECASTLE SUPPORT SYSTEM — FINAL INDEX.JS
 // =========================
 
-// Load environment variables
 require("dotenv").config();
 
-// Discord.js v14
 const {
     Client,
     GatewayIntentBits,
@@ -17,17 +15,31 @@ const {
     StringSelectMenuBuilder
 } = require("discord.js");
 
-// File system
 const fs = require("fs");
 const path = require("path");
 
-// Express keep-alive (Render requirement)
+// UptimeRobot / Render keep-alive
 const express = require("express");
 const app = express();
-app.get("/", (req, res) => res.send("WhiteCastle Support Bot Running"));
-app.listen(3000);
 
-// Create Discord client
+app.get("/", (req, res) => {
+    res.json({
+        embed: {
+            title: "WhiteCastle Support System",
+            description: "Bot is online and running. Use !help for commands.",
+            color: 0x2E6F40,
+            footer: {
+                text: `WhiteCastle Support Systems | ${new Date().toLocaleString("en-US", { timeZone: "America/Chicago" })}`
+            }
+        }
+    });
+});
+
+app.listen(process.env.PORT, () => {
+    console.log(`Uptime server running on port ${process.env.PORT}`);
+});
+
+// Discord client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -38,17 +50,13 @@ const client = new Client({
     partials: [Partials.Channel]
 });
 
-// =========================
-// DATA FOLDER SETUP
-// =========================
-
+// Data folders
 const dataFolder = path.join(__dirname, "data");
 const transcriptsFolder = path.join(dataFolder, "transcripts");
 
 if (!fs.existsSync(dataFolder)) fs.mkdirSync(dataFolder);
 if (!fs.existsSync(transcriptsFolder)) fs.mkdirSync(transcriptsFolder);
 
-// Auto-create JSON files if missing
 const ticketsFile = path.join(dataFolder, "tickets.json");
 const snippetsFile = path.join(dataFolder, "snippets.json");
 const usersFile = path.join(dataFolder, "users.json");
@@ -57,40 +65,23 @@ if (!fs.existsSync(ticketsFile)) fs.writeFileSync(ticketsFile, "{}");
 if (!fs.existsSync(snippetsFile)) fs.writeFileSync(snippetsFile, "{}");
 if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, "{}");
 
-// Load JSON data
 let tickets = JSON.parse(fs.readFileSync(ticketsFile));
 let snippets = JSON.parse(fs.readFileSync(snippetsFile));
 let users = JSON.parse(fs.readFileSync(usersFile));
 
-// =========================
-// SAVE FUNCTIONS (Permanent)
-// =========================
-
 function saveTickets() {
     fs.writeFileSync(ticketsFile, JSON.stringify(tickets, null, 4));
 }
-
 function saveSnippets() {
     fs.writeFileSync(snippetsFile, JSON.stringify(snippets, null, 4));
 }
-
 function saveUsers() {
     fs.writeFileSync(usersFile, JSON.stringify(users, null, 4));
 }
 
-// =========================
-// TIMESTAMP FUNCTION
-// =========================
-
 function CSTTimestamp() {
-    return new Date().toLocaleString("en-US", {
-        timeZone: "America/Chicago"
-    });
+    return new Date().toLocaleString("en-US", { timeZone: "America/Chicago" });
 }
-
-// =========================
-// EMBED HELPERS (WhiteCastle Branding)
-// =========================
 
 function wcFooter() {
     return `WhiteCastle Support Systems | ${CSTTimestamp()}`;
@@ -107,10 +98,6 @@ function wcAuthor(embed, user) {
     });
 }
 
-// =========================
-// BUTTON HELPERS
-// =========================
-
 function confirmButtons() {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -123,10 +110,6 @@ function confirmButtons() {
             .setStyle(ButtonStyle.Danger)
     );
 }
-
-// =========================
-// DEPARTMENT SELECT MENU
-// =========================
 
 function departmentMenu() {
     return new ActionRowBuilder().addComponents(
@@ -142,17 +125,21 @@ function departmentMenu() {
     );
 }
 
-// =========================
-// PART 1 COMPLETE
-// =========================
-console.log("WhiteCastle Rewrite — Part 1 Loaded");
-
-// =========================
-// WHITECASTLE SUPPORT SYSTEM — PART 2
-// =========================
+function transferMenu() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId("transfer_select")
+            .setPlaceholder("Transfer ticket to...")
+            .addOptions([
+                { label: "General Support", value: "gs" },
+                { label: "Relations", value: "pr" },
+                { label: "Staffing", value: "s" },
+                { label: "Leadership Support", value: "ls" }
+            ])
+    );
+}
 
 const PREFIX = process.env.PREFIX || "!";
-
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 
@@ -161,36 +148,73 @@ const PR_ROLE_ID = process.env.PR_ROLE_ID;
 const S_ROLE_ID = process.env.S_ROLE_ID;
 const LS_ROLE_ID = process.env.LS_ROLE_ID;
 
-// Track pending open + close confirmations
-const pendingOpen = new Map();
-const pendingClose = new Map();
-
-// =========================
-// READY EVENT
-// =========================
+const pendingOpen = new Map();   // userId -> true
+const pendingClose = new Map();  // channelId -> true
+const pendingTransfer = new Map(); // channelId -> true
 
 client.once("ready", () => {
     console.log(`Logged in as ${client.user.tag} — WhiteCastle Support System Online`);
+
+    const embed = wcEmbed("#2E6F40");
+    embed
+        .setTitle("WhiteCastle Support System Online")
+        .setDescription("Bot is online and running.\nUse `!help` for commands.");
+
+    console.log("Use !help for commands.");
 });
 
-// =========================
-// DM MESSAGE HANDLER (Open Flow + Relay)
-// =========================
-
+// DM handler: open flow + relay
 client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
-    // DM flow
     if (message.channel.type === 1) {
         const user = message.author;
 
+        // Check if user already has an open ticket
+        const openTickets = Object.entries(tickets).filter(
+            ([, t]) => t.userId === user.id && !t.closed
+        );
+
+        if (openTickets.length > 0) {
+            // Relay DM to latest open ticket
+            const [ticketId] = openTickets[openTickets.length - 1];
+            const guild = client.guilds.cache.first();
+            if (!guild) return;
+
+            const channel = guild.channels.cache.get(ticketId);
+            if (!channel) return;
+
+            const relayEmbed = wcEmbed("#2B2D31");
+            wcAuthor(relayEmbed, user)
+                .setTitle("New Message from User")
+                .setDescription(message.content || "[No content]");
+
+            await channel.send({ embeds: [relayEmbed] });
+
+            try { await message.react("✅"); } catch {}
+
+            tickets[ticketId].messages.push({
+                timestamp: new Date().toISOString(),
+                author: "user",
+                content: message.content || "",
+                attachments: message.attachments.map(a => a.url)
+            });
+            saveTickets();
+
+            return;
+        }
+
+        // No open ticket → send green open confirmation
         if (!pendingOpen.has(user.id)) {
             pendingOpen.set(user.id, true);
 
             const embed = wcEmbed("#2E6F40");
             wcAuthor(embed, user)
                 .setTitle("Are you sure you would like to create a thread?")
-                .setDescription("Creating a thread will send our moderators a ticket that will be chatted through.");
+                .setDescription(
+                    "Creating a thread will send our moderators a ticket that will be chatted through.\n\n" +
+                    "Use `!help` for staff commands."
+                );
 
             await message.channel.send({
                 embeds: [embed],
@@ -200,58 +224,31 @@ client.on("messageCreate", async (message) => {
             return;
         }
 
-        const userTickets = Object.entries(tickets).filter(
-            ([, t]) => t.userId === user.id && !t.closed
-        );
-
-        if (userTickets.length === 0) return;
-
-        const [ticketId] = userTickets[userTickets.length - 1];
-        const guild = client.guilds.cache.first();
-        if (!guild) return;
-
-        const channel = guild.channels.cache.get(ticketId);
-        if (!channel) return;
-
-        const relayEmbed = wcEmbed("#2B2D31");
-        wcAuthor(relayEmbed, user)
-            .setDescription(message.content || "[No content]");
-
-        await channel.send({ embeds: [relayEmbed] });
-
-        try { await message.react("✅"); } catch {}
-
-        tickets[ticketId].messages.push({
-            timestamp: new Date().toISOString(),
-            author: "user",
-            content: message.content || "",
-            attachments: message.attachments.map(a => a.url)
-        });
-        saveTickets();
-
         return;
     }
 });
 
-// =========================
-// INTERACTION HANDLER
-// =========================
-
+// Interaction handler: open confirm, dept select, close confirm, transfer select
 client.on("interactionCreate", async (interaction) => {
+    const isDM = interaction.channel.type === 1;
+
+    // OPEN / CLOSE CONFIRM BUTTONS
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        if (customId === "confirm_yes" || customId === "confirm_no") {
-            if (interaction.channel.type !== 1) return;
-
+        // DM open flow
+        if (isDM && (customId === "confirm_yes" || customId === "confirm_no")) {
             const user = interaction.user;
+
+            if (!pendingOpen.has(user.id)) return;
 
             if (customId === "confirm_no") {
                 pendingOpen.delete(user.id);
 
                 const cancelEmbed = wcEmbed("#2B2D31");
                 wcAuthor(cancelEmbed, user)
-                    .setTitle("Thread Creation Cancelled");
+                    .setTitle("Thread Creation Cancelled")
+                    .setDescription("You have cancelled the creation of a support thread.");
 
                 await interaction.update({
                     embeds: [cancelEmbed],
@@ -273,33 +270,129 @@ client.on("interactionCreate", async (interaction) => {
 
             return;
         }
+
+        // Guild close flow
+        if (!isDM && (customId === "confirm_yes" || customId === "confirm_no")) {
+            const channel = interaction.channel;
+            const ticketId = channel.id;
+
+            if (!pendingClose.has(ticketId)) return;
+
+            if (customId === "confirm_no") {
+                pendingClose.delete(ticketId);
+
+                const embed = wcEmbed("#2B2D31");
+                wcAuthor(embed, interaction.user)
+                    .setTitle("Ticket Close Cancelled")
+                    .setDescription("This ticket will remain open.");
+
+                return interaction.update({
+                    embeds: [embed],
+                    components: []
+                });
+            }
+
+            const ticket = tickets[ticketId];
+            ticket.closed = new Date().toISOString();
+            saveTickets();
+
+            const transcriptPath = path.join(
+                transcriptsFolder,
+                `transcript-${ticketId}.txt`
+            );
+
+            let transcriptText = `Transcript for ticket ${ticketId}\nGenerated: ${new Date().toISOString()}\n\n`;
+
+            for (const msg of ticket.messages) {
+                transcriptText += `[${msg.timestamp}] ${msg.author}: ${msg.content}\n`;
+            }
+
+            fs.writeFileSync(transcriptPath, transcriptText);
+
+            const logChannel = client.channels.cache.get(LOG_CHANNEL_ID);
+            if (logChannel) {
+                const logEmbed = wcEmbed("#ED4245");
+                logEmbed
+                    .setTitle("Ticket Closed")
+                    .setDescription(`Ticket <#${ticketId}> has been closed.`);
+
+                await logChannel.send({
+                    embeds: [logEmbed],
+                    files: [transcriptPath]
+                });
+            }
+
+            const embed = wcEmbed("#ED4245");
+            wcAuthor(embed, interaction.user)
+                .setTitle("Ticket Closed")
+                .setDescription("This ticket has been closed and a transcript has been generated.");
+
+            await interaction.update({
+                embeds: [embed],
+                components: []
+            });
+
+            setTimeout(() => {
+                channel.delete().catch(() => {});
+            }, 2000);
+
+            pendingClose.delete(ticketId);
+
+            return;
+        }
     }
 
+    // DEPARTMENT SELECT (ticket creation) + TRANSFER SELECT
     if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === "dept_select") {
-            if (interaction.channel.type !== 1) return;
+        const { customId } = interaction;
+
+        // Ticket creation from DM
+        if (customId === "dept_select") {
+            if (!isDM) return;
 
             const user = interaction.user;
             const selected = interaction.values[0];
 
             const guild = client.guilds.cache.first();
+            if (!guild) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Support guild not found.");
+                await interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                return;
+            }
+
             const category = guild.channels.cache.get(TICKET_CATEGORY_ID);
+            if (!category) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Ticket category not found.");
+                await interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                return;
+            }
 
             const channelName = `ticket-${selected}-${user.username}`
                 .toLowerCase()
                 .replace(/[^a-z0-9\-]/g, "");
 
+            const permsBase = [
+                { id: guild.id, deny: ["ViewChannel"] },
+                { id: user.id, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] }
+            ];
+
+            let deptRoleId = null;
+            if (selected === "gs") deptRoleId = GS_ROLE_ID;
+            if (selected === "pr") deptRoleId = PR_ROLE_ID;
+            if (selected === "s") deptRoleId = S_ROLE_ID;
+            if (selected === "ls") deptRoleId = LS_ROLE_ID;
+
+            if (deptRoleId) {
+                permsBase.push({
+                    id: deptRoleId,
+                    allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"]
+                });
+            }
+
             const ticketChannel = await guild.channels.create({
                 name: channelName,
                 parent: category.id,
-                permissionOverwrites: [
-                    { id: guild.id, deny: ["ViewChannel"] },
-                    { id: user.id, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] },
-                    { id: GS_ROLE_ID, allow: selected === "gs" ? ["ViewChannel", "SendMessages", "ReadMessageHistory"] : [] },
-                    { id: PR_ROLE_ID, allow: selected === "pr" ? ["ViewChannel", "SendMessages", "ReadMessageHistory"] : [] },
-                    { id: S_ROLE_ID, allow: selected === "s" ? ["ViewChannel", "SendMessages", "ReadMessageHistory"] : [] },
-                    { id: LS_ROLE_ID, allow: selected === "ls" ? ["ViewChannel", "SendMessages", "ReadMessageHistory"] : [] }
-                ]
+                permissionOverwrites: permsBase
             });
 
             tickets[ticketChannel.id] = {
@@ -330,15 +423,16 @@ client.on("interactionCreate", async (interaction) => {
                     `A new support ticket has been created for **${user.username}**.\n\n` +
                     `**Department:** ${selected.toUpperCase()}\n` +
                     `Use \`${PREFIX}reply\` to respond.\n` +
+                    `Use \`${PREFIX}transfer\` to move this ticket.\n` +
                     `Use \`${PREFIX}close\` to close this ticket.`
                 );
 
             await ticketChannel.send({ embeds: [ticketEmbed] });
 
-            const dmEmbed = wcEmbed("#2B2D31");
+            const dmEmbed = wcEmbed("#2E6F40");
             wcAuthor(dmEmbed, user)
                 .setTitle("Thread Created")
-                .setDescription("Your support thread has been created.");
+                .setDescription("Your support thread has been created. Our moderators will respond shortly.");
 
             await interaction.update({
                 embeds: [dmEmbed],
@@ -349,44 +443,166 @@ client.on("interactionCreate", async (interaction) => {
 
             return;
         }
+
+        // Transfer select in guild
+        if (customId === "transfer_select") {
+            if (isDM) return;
+
+            const channel = interaction.channel;
+            const ticketId = channel.id;
+            if (!tickets[ticketId]) return;
+            if (!pendingTransfer.has(ticketId)) return;
+
+            const selected = interaction.values[0];
+            const guild = interaction.guild;
+
+            let newDeptRoleId = null;
+            let newDeptLabel = "";
+            if (selected === "gs") { newDeptRoleId = GS_ROLE_ID; newDeptLabel = "General Support"; }
+            if (selected === "pr") { newDeptRoleId = PR_ROLE_ID; newDeptLabel = "Relations"; }
+            if (selected === "s") { newDeptRoleId = S_ROLE_ID; newDeptLabel = "Staffing"; }
+            if (selected === "ls") { newDeptRoleId = LS_ROLE_ID; newDeptLabel = "Leadership Support"; }
+
+            if (!newDeptRoleId) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Invalid department selected.");
+                await interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                return;
+            }
+
+            // Switch visibility: remove old dept role, add new dept role
+            const overwrites = channel.permissionOverwrites.cache;
+
+            const deptRoles = [GS_ROLE_ID, PR_ROLE_ID, S_ROLE_ID, LS_ROLE_ID].filter(Boolean);
+
+            const newOverwrites = overwrites.map(po => ({
+                id: po.id,
+                allow: po.allow.bitfield,
+                deny: po.deny.bitfield,
+                type: po.type
+            })).filter(po => !deptRoles.includes(po.id));
+
+            newOverwrites.push({
+                id: newDeptRoleId,
+                allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"],
+                deny: []
+            });
+
+            await channel.permissionOverwrites.set(newOverwrites);
+
+            const oldDept = tickets[ticketId].department;
+            tickets[ticketId].department = selected;
+            tickets[ticketId].transfers.push({
+                from: oldDept,
+                to: selected,
+                by: interaction.user.id,
+                timestamp: new Date().toISOString()
+            });
+            saveTickets();
+
+            const successEmbed = wcEmbed("#2E6F40");
+            successEmbed
+                .setTitle("Ticket Transferred")
+                .setDescription(
+                    `This ticket has been transferred to **${newDeptLabel}**.\n\n` +
+                    `Transferred by: <@${interaction.user.id}>`
+                );
+
+            await interaction.update({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            // Ping new department role
+            await channel.send({
+                content: `<@&${newDeptRoleId}>`,
+                embeds: [
+                    wcEmbed("#2E6F40")
+                        .setTitle("New Ticket Assigned")
+                        .setDescription("This ticket has been transferred to your department.")
+                ]
+            });
+
+            // Log transfer
+            const logChannel = client.channels.cache.get(LOG_CHANNEL_ID);
+            if (logChannel) {
+                const logEmbed = wcEmbed("#2E6F40");
+                logEmbed
+                    .setTitle("Ticket Transferred")
+                    .setDescription(
+                        `Ticket <#${ticketId}> transferred.\n\n` +
+                        `From: **${oldDept?.toUpperCase() || "N/A"}**\n` +
+                        `To: **${selected.toUpperCase()}**\n` +
+                        `By: <@${interaction.user.id}>`
+                    );
+                await logChannel.send({ embeds: [logEmbed] });
+            }
+
+            pendingTransfer.delete(ticketId);
+
+            return;
+        }
     }
 });
 
-// =========================
-// PART 2 COMPLETE
-// =========================
-console.log("WhiteCastle Rewrite — Part 2 Loaded");
-
-// =========================
-// WHITECASTLE SUPPORT SYSTEM — PART 3
-// =========================
-
+// Staff commands
 client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
     if (!message.guild) return;
 
-    const args = message.content.split(" ");
+    const args = message.content.trim().split(" ");
     const cmd = args.shift().toLowerCase();
 
-    if (cmd === `${PREFIX}reply`) {
-        const ticketId = message.channel.id;
-        if (!tickets[ticketId] || tickets[ticketId].closed) return;
+    // HELP
+    if (cmd === `${PREFIX}help`) {
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("WhiteCastle Staff Commands")
+            .setDescription(
+                `\`${PREFIX}reply <msg>\` — reply to user\n` +
+                `\`${PREFIX}areply <msg>\` — anonymous reply\n` +
+                `\`${PREFIX}snippet add <name>\` — save snippet (last message)\n` +
+                `\`${PREFIX}snippet <name>\` — send snippet to user\n` +
+                `\`${PREFIX}snippets\` — list snippets\n` +
+                `\`${PREFIX}transfer\` — transfer ticket to another department\n` +
+                `\`${PREFIX}close\` — close ticket and generate transcript`
+            );
 
-        const userId = tickets[ticketId].userId;
+        await message.channel.send({ embeds: [embed] });
+        return;
+    }
+
+    const ticketId = message.channel.id;
+    const ticket = tickets[ticketId];
+
+    // REPLY
+    if (cmd === `${PREFIX}reply`) {
+        if (!ticket || ticket.closed) return;
+
+        const userId = ticket.userId;
         const user = await client.users.fetch(userId);
 
         const replyText = args.join(" ");
-        if (!replyText) return message.reply("You must provide a message.");
+        if (!replyText) {
+            const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("You must provide a message.");
+            await message.channel.send({ embeds: [errEmbed] });
+            return;
+        }
 
         const embed = wcEmbed("#2B2D31");
-        wcAuthor(embed, message.author).setDescription(replyText);
+        wcAuthor(embed, message.author)
+            .setTitle("Staff Reply")
+            .setDescription(replyText);
+
         await message.channel.send({ embeds: [embed] });
 
         const dmEmbed = wcEmbed("#2B2D31");
-        wcAuthor(dmEmbed, message.author).setDescription(replyText);
+        dmAuthor = wcAuthor(dmEmbed, message.author)
+            .setTitle("Support Response")
+            .setDescription(replyText);
+
         try { await user.send({ embeds: [dmEmbed] }); } catch {}
 
-        tickets[ticketId].messages.push({
+        ticket.messages.push({
             timestamp: new Date().toISOString(),
             author: "staff",
             content: replyText,
@@ -397,21 +613,25 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
+    // ANONYMOUS REPLY
     if (cmd === `${PREFIX}areply`) {
-        const ticketId = message.channel.id;
-        if (!tickets[ticketId] || tickets[ticketId].closed) return;
+        if (!ticket || ticket.closed) return;
 
-        const userId = tickets[ticketId].userId;
+        const userId = ticket.userId;
         const user = await client.users.fetch(userId);
 
         const replyText = args.join(" ");
-        if (!replyText) return message.reply("You must provide a message.");
+        if (!replyText) {
+            const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("You must provide a message.");
+            await message.channel.send({ embeds: [errEmbed] });
+            return;
+        }
 
         const embed = wcEmbed("#2B2D31");
         embed.setAuthor({
             name: "WhiteCastle Staff",
             iconURL: client.user.displayAvatarURL()
-        }).setDescription(replyText);
+        }).setTitle("Staff Reply").setDescription(replyText);
 
         await message.channel.send({ embeds: [embed] });
 
@@ -419,11 +639,11 @@ client.on("messageCreate", async (message) => {
         dmEmbed.setAuthor({
             name: "WhiteCastle Staff",
             iconURL: client.user.displayAvatarURL()
-        }).setDescription(replyText);
+        }).setTitle("Support Response").setDescription(replyText);
 
         try { await user.send({ embeds: [dmEmbed] }); } catch {}
 
-        tickets[ticketId].messages.push({
+        ticket.messages.push({
             timestamp: new Date().toISOString(),
             author: "staff",
             content: replyText,
@@ -434,59 +654,94 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
+    // SNIPPET
     if (cmd === `${PREFIX}snippet`) {
         const sub = args.shift();
 
         if (sub === "add") {
             const name = args.shift();
-            if (!name) return message.reply("Provide a snippet name.");
+            if (!name) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Provide a snippet name.");
+                await message.channel.send({ embeds: [errEmbed] });
+                return;
+            }
 
             const lastMsg = message.channel.lastMessage;
-            if (!lastMsg) return message.reply("No message found.");
+            if (!lastMsg) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("No message found to save.");
+                await message.channel.send({ embeds: [errEmbed] });
+                return;
+            }
 
             snippets[name] = lastMsg.content;
             saveSnippets();
 
-            return message.reply(`Snippet **${name}** saved.`);
+            const embed = wcEmbed("#2E6F40").setTitle("Snippet Saved").setDescription(`Snippet **${name}** saved.`);
+            await message.channel.send({ embeds: [embed] });
+
+            return;
         }
 
         const name = sub;
-        if (!snippets[name]) return message.reply("Snippet not found.");
+        if (!snippets[name]) {
+            const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Snippet not found.");
+            await message.channel.send({ embeds: [errEmbed] });
+            return;
+        }
 
-        const ticketId = message.channel.id;
-        if (!tickets[ticketId]) return;
+        if (!ticket) return;
 
-        const userId = tickets[ticketId].userId;
+        const userId = ticket.userId;
         const user = await client.users.fetch(userId);
 
         const dmEmbed = wcEmbed("#2B2D31");
-        wcAuthor(dmEmbed, message.author).setDescription(snippets[name]);
+        wcAuthor(dmEmbed, message.author)
+            .setTitle("Support Message")
+            .setDescription(snippets[name]);
 
         try { await user.send({ embeds: [dmEmbed] }); } catch {}
 
-        return message.reply(`Snippet **${name}** sent to user.`);
+        const embed = wcEmbed("#2E6F40").setTitle("Snippet Sent").setDescription(`Snippet **${name}** sent to user.`);
+        await message.channel.send({ embeds: [embed] });
+
+        return;
     }
 
+    // SNIPPETS LIST
     if (cmd === `${PREFIX}snippets`) {
         const list = Object.keys(snippets).map(s => `• ${s}`).join("\n") || "None";
-        return message.reply(`**Saved Snippets:**\n${list}`);
+
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("Saved Snippets")
+            .setDescription(list);
+
+        await message.channel.send({ embeds: [embed] });
+        return;
     }
 
-    if (cmd === `${PREFIX}help`) {
-        return message.reply(
-            "**WhiteCastle Staff Commands:**\n" +
-            `\`${PREFIX}reply <msg>\` — reply to user\n` +
-            `\`${PREFIX}areply <msg>\` — anonymous reply\n` +
-            `\`${PREFIX}snippet add <name>\` — save snippet\n` +
-            `\`${PREFIX}snippet <name>\` — send snippet\n` +
-            `\`${PREFIX}snippets\` — list snippets\n` +
-            `\`${PREFIX}close\` — close ticket`
-        );
+    // TRANSFER
+    if (cmd === `${PREFIX}transfer`) {
+        if (!ticket || ticket.closed) return;
+
+        pendingTransfer.set(ticketId, true);
+
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("Transfer Ticket")
+            .setDescription("Select the department to transfer this ticket to.");
+
+        await message.channel.send({
+            embeds: [embed],
+            components: [transferMenu()]
+        });
+
+        return;
     }
 
+    // CLOSE
     if (cmd === `${PREFIX}close`) {
-        const ticketId = message.channel.id;
-        if (!tickets[ticketId] || tickets[ticketId].closed) return;
+        if (!ticket || ticket.closed) return;
 
         pendingClose.set(ticketId, true);
 
@@ -504,80 +759,7 @@ client.on("messageCreate", async (message) => {
     }
 });
 
-// =========================
-// CLOSE CONFIRMATION BUTTONS
-// =========================
-
-client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isButton()) return;
-
-    const { customId } = interaction;
-    const channel = interaction.channel;
-    const ticketId = channel.id;
-
-    if (!pendingClose.has(ticketId)) return;
-
-    if (customId === "confirm_no") {
-        pendingClose.delete(ticketId);
-
-        const embed = wcEmbed("#2B2D31");
-        wcAuthor(embed, interaction.user)
-            .setTitle("Ticket Close Cancelled");
-
-        return interaction.update({
-            embeds: [embed],
-            components: []
-        });
-    }
-
-    const ticket = tickets[ticketId];
-    ticket.closed = new Date().toISOString();
-    saveTickets();
-
-    const transcriptPath = path.join(
-        transcriptsFolder,
-        `transcript-${ticketId}.txt`
-    );
-
-    let transcriptText = `Transcript for ticket ${ticketId}\nGenerated: ${new Date().toISOString()}\n\n`;
-
-    for (const msg of ticket.messages) {
-        transcriptText += `[${msg.timestamp}] ${msg.author}: ${msg.content}\n`;
-    }
-
-    fs.writeFileSync(transcriptPath, transcriptText);
-
-    const logChannel = client.channels.cache.get(LOG_CHANNEL_ID);
-    if (logChannel) {
-        await logChannel.send({
-            content: `Transcript for ticket ${ticketId}`,
-            files: [transcriptPath]
-        });
-    }
-
-    const embed = wcEmbed("#ED4245");
-    wcAuthor(embed, interaction.user)
-        .setTitle("Ticket Closed");
-
-    await interaction.update({
-        embeds: [embed],
-        components: []
-    });
-
-    setTimeout(() => {
-        channel.delete().catch(() => {});
-    }, 2000);
-
-    pendingClose.delete(ticketId);
-});
-
-// =========================
-// LOGIN
-// =========================
-
+// Login
 client.login(process.env.TOKEN);
 
-// =========================
-// FINAL MERGED FILE COMPLETE
-// =========================
-console.log("WhiteCastle Support System — FULL BUILD LOADED");
+console.log("WhiteCastle Support System — FULL FINAL BUILD LOADED");
