@@ -183,23 +183,17 @@ client.once("ready", () => {
 });
 
 // =========================
-// DM HANDLER (OPEN + RELAY, FIXED)
+// DM HANDLER (OPEN + RELAY)
 // =========================
 
 client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
-    const isDM =
-        message.channel.type === ChannelType.DM ||
-        message.channel.type === ChannelType.GroupDM ||
-        message.channel.type === ChannelType.PrivateThread ||
-        message.channel.type === 0;
-
+    const isDM = message.channel.type === ChannelType.DM;
     if (!isDM) return;
 
     const user = message.author;
 
-    // Check for existing open ticket
     const openTickets = Object.entries(tickets).filter(
         ([, t]) => t.userId === user.id && !t.closed
     );
@@ -234,7 +228,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // No open ticket → send green open confirmation
     if (!pendingOpen.has(user.id)) {
         pendingOpen.set(user.id, true);
 
@@ -253,7 +246,6 @@ client.on("messageCreate", async (message) => {
 
         return;
     }
-    
 });
 
 // =========================
@@ -261,13 +253,8 @@ client.on("messageCreate", async (message) => {
 // =========================
 
 client.on("interactionCreate", async (interaction) => {
-    const isDM =
-        interaction.channel.type === ChannelType.DM ||
-        interaction.channel.type === ChannelType.GroupDM ||
-        interaction.channel.type === ChannelType.PrivateThread ||
-        interaction.channel.type === 0;
+    const isDM = interaction.channel.type === ChannelType.DM;
 
-    // OPEN CONFIRM (DM)
     if (interaction.isButton()) {
         const { customId } = interaction;
 
@@ -305,7 +292,6 @@ client.on("interactionCreate", async (interaction) => {
             return;
         }
 
-        // CLOSE CONFIRM (GUILD)
         if (!isDM && (customId === "confirm_yes" || customId === "confirm_no")) {
             const channel = interaction.channel;
             const ticketId = channel.id;
@@ -331,20 +317,17 @@ client.on("interactionCreate", async (interaction) => {
             ticket.closed = new Date().toISOString();
             saveTickets();
 
-            // Build transcript text
             let transcriptText = "";
             for (const msg of ticket.messages) {
                 transcriptText += `[${msg.timestamp}] ${msg.author}: ${msg.content}\n`;
             }
 
-            // Save transcript file
             const transcriptPath = path.join(
                 transcriptsFolder,
                 `transcript-${ticketId}.txt`
             );
             fs.writeFileSync(transcriptPath, transcriptText);
 
-            // Transcript embed
             const transcriptEmbed = wcEmbed("#2B2D31")
                 .setTitle(`Transcript for Ticket ${ticketId}`)
                 .setDescription(
@@ -353,7 +336,6 @@ client.on("interactionCreate", async (interaction) => {
                         : transcriptText || "No messages logged."
                 );
 
-            // Send to log channel
             const logChannel = client.channels.cache.get(LOG_CHANNEL_ID);
             if (logChannel) {
                 await logChannel.send({
@@ -362,7 +344,6 @@ client.on("interactionCreate", async (interaction) => {
                 });
             }
 
-            // DM user that ticket is closed
             try {
                 const user = await client.users.fetch(ticket.userId);
                 const dmEmbed = wcEmbed("#ED4245")
@@ -395,11 +376,9 @@ client.on("interactionCreate", async (interaction) => {
         }
     }
 
-    // SELECT MENUS
     if (interaction.isStringSelectMenu()) {
         const { customId } = interaction;
 
-        // DEPARTMENT SELECT (CREATE TICKET)
         if (customId === "dept_select") {
             if (!isDM) return;
 
@@ -474,7 +453,6 @@ client.on("interactionCreate", async (interaction) => {
 
             await ticketChannel.send({ embeds: [ticketEmbed] });
 
-            // Neutral open ping outside embed
             await ticketChannel.send(`<@&${deptRoleId}>`);
 
             const dmEmbed = wcEmbed("#2E6F40");
@@ -492,7 +470,6 @@ client.on("interactionCreate", async (interaction) => {
             return;
         }
 
-        // TRANSFER SELECT
         if (customId === "transfer_select") {
             if (isDM) return;
 
@@ -595,7 +572,6 @@ client.on("messageCreate", async (message) => {
     const ticketId = message.channel.id;
     const ticket = tickets[ticketId];
 
-    // HELP
     if (cmd === `${PREFIX}help`) {
         const embed = wcEmbed("#2B2D31");
         wcAuthor(embed, message.author)
@@ -614,7 +590,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // REPLY
     if (cmd === `${PREFIX}reply`) {
         if (!ticket || ticket.closed) return;
 
@@ -653,7 +628,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // ANONYMOUS REPLY
     if (cmd === `${PREFIX}areply`) {
         if (!ticket || ticket.closed) return;
 
@@ -694,7 +668,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // SNIPPET
     if (cmd === `${PREFIX}snippet`) {
         const sub = args.shift();
 
@@ -747,7 +720,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // SNIPPETS LIST
     if (cmd === `${PREFIX}snippets`) {
         const list = Object.keys(snippets).map(s => `• ${s}`).join("\n") || "None";
 
@@ -760,7 +732,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // TRANSFER
     if (cmd === `${PREFIX}transfer`) {
         if (!ticket || ticket.closed) return;
 
@@ -779,7 +750,6 @@ client.on("messageCreate", async (message) => {
         return;
     }
 
-    // CLOSE
     if (cmd === `${PREFIX}close`) {
         if (!ticket || ticket.closed) return;
 
