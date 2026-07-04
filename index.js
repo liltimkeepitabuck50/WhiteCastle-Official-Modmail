@@ -253,8 +253,8 @@ client.on("messageCreate", async (message) => {
 
         return;
     }
+    
 });
-
 // =========================
 // INTERACTION HANDLER
 // =========================
@@ -592,4 +592,216 @@ client.on("messageCreate", async (message) => {
     const cmd = args.shift().toLowerCase();
 
     const ticketId = message.channel.id;
-    const ticket = tickets[ticket
+    const ticket = tickets[ticketId];
+
+    // HELP
+    if (cmd === `${PREFIX}help`) {
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("WhiteCastle Staff Commands")
+            .setDescription(
+                `\`${PREFIX}reply <msg>\` — reply to user\n` +
+                `\`${PREFIX}areply <msg>\` — anonymous reply\n` +
+                `\`${PREFIX}snippet add <name>\` — save snippet\n` +
+                `\`${PREFIX}snippet <name>\` — send snippet\n` +
+                `\`${PREFIX}snippets\` — list snippets\n` +
+                `\`${PREFIX}transfer\` — transfer ticket\n` +
+                `\`${PREFIX}close\` — close ticket`
+            );
+
+        await message.channel.send({ embeds: [embed] });
+        return;
+    }
+
+    // REPLY
+    if (cmd === `${PREFIX}reply`) {
+        if (!ticket || ticket.closed) return;
+
+        const userId = ticket.userId;
+        const user = await client.users.fetch(userId);
+
+        const replyText = args.join(" ");
+        if (!replyText) {
+            const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("You must provide a message.");
+            await message.channel.send({ embeds: [errEmbed] });
+            return;
+        }
+
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("Staff Reply")
+            .setDescription(replyText);
+
+        await message.channel.send({ embeds: [embed] });
+
+        const dmEmbed = wcEmbed("#2B2D31");
+        wcAuthor(dmEmbed, message.author)
+            .setTitle("Support Response")
+            .setDescription(replyText);
+
+        try { await user.send({ embeds: [dmEmbed] }); } catch {}
+
+        ticket.messages.push({
+            timestamp: new Date().toISOString(),
+            author: "staff",
+            content: replyText,
+            attachments: []
+        });
+        saveTickets();
+
+        return;
+    }
+
+    // ANONYMOUS REPLY
+    if (cmd === `${PREFIX}areply`) {
+        if (!ticket || ticket.closed) return;
+
+        const userId = ticket.userId;
+        const user = await client.users.fetch(userId);
+
+        const replyText = args.join(" ");
+        if (!replyText) {
+            const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("You must provide a message.");
+            await message.channel.send({ embeds: [errEmbed] });
+            return;
+        }
+
+        const embed = wcEmbed("#2B2D31");
+        embed.setAuthor({
+            name: "WhiteCastle Staff",
+            iconURL: client.user.displayAvatarURL()
+        }).setTitle("Staff Reply").setDescription(replyText);
+
+        await message.channel.send({ embeds: [embed] });
+
+        const dmEmbed = wcEmbed("#2B2D31");
+        dmEmbed.setAuthor({
+            name: "WhiteCastle Staff",
+            iconURL: client.user.displayAvatarURL()
+        }).setTitle("Support Response").setDescription(replyText);
+
+        try { await user.send({ embeds: [dmEmbed] }); } catch {}
+
+        ticket.messages.push({
+            timestamp: new Date().toISOString(),
+            author: "staff",
+            content: replyText,
+            attachments: []
+        });
+        saveTickets();
+
+        return;
+    }
+
+    // SNIPPET
+    if (cmd === `${PREFIX}snippet`) {
+        const sub = args.shift();
+
+        if (sub === "add") {
+            const name = args.shift();
+            if (!name) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Provide a snippet name.");
+                await message.channel.send({ embeds: [errEmbed] });
+                return;
+            }
+
+            const lastMsg = message.channel.lastMessage;
+            if (!lastMsg) {
+                const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("No message found to save.");
+                await message.channel.send({ embeds: [errEmbed] });
+                return;
+            }
+
+            snippets[name] = lastMsg.content;
+            saveSnippets();
+
+            const embed = wcEmbed("#2E6F40").setTitle("Snippet Saved").setDescription(`Snippet **${name}** saved.`);
+            await message.channel.send({ embeds: [embed] });
+
+            return;
+        }
+
+        const name = sub;
+        if (!snippets[name]) {
+            const errEmbed = wcEmbed("#ED4245").setTitle("Error").setDescription("Snippet not found.");
+            await message.channel.send({ embeds: [errEmbed] });
+            return;
+        }
+
+        if (!ticket) return;
+
+        const userId = ticket.userId;
+        const user = await client.users.fetch(userId);
+
+        const dmEmbed = wcEmbed("#2B2D31");
+        wcAuthor(dmEmbed, message.author)
+            .setTitle("Support Message")
+            .setDescription(snippets[name]);
+
+        try { await user.send({ embeds: [dmEmbed] }); } catch {}
+
+        const embed = wcEmbed("#2E6F40").setTitle("Snippet Sent").setDescription(`Snippet **${name}** sent to user.`);
+        await message.channel.send({ embeds: [embed] });
+
+        return;
+    }
+
+    // SNIPPETS LIST
+    if (cmd === `${PREFIX}snippets`) {
+        const list = Object.keys(snippets).map(s => `• ${s}`).join("\n") || "None";
+
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("Saved Snippets")
+            .setDescription(list);
+
+        await message.channel.send({ embeds: [embed] });
+        return;
+    }
+
+    // TRANSFER
+    if (cmd === `${PREFIX}transfer`) {
+        if (!ticket || ticket.closed) return;
+
+        pendingTransfer.set(ticketId, true);
+
+        const embed = wcEmbed("#2B2D31");
+        wcAuthor(embed, message.author)
+            .setTitle("Transfer Ticket")
+            .setDescription("Select the department to transfer this ticket to.");
+
+        await message.channel.send({
+            embeds: [embed],
+            components: [transferMenu()]
+        });
+
+        return;
+    }
+
+    // CLOSE
+    if (cmd === `${PREFIX}close`) {
+        if (!ticket || ticket.closed) return;
+
+        pendingClose.set(ticketId, true);
+
+        const embed = wcEmbed("#ED4245");
+        wcAuthor(embed, message.author)
+            .setTitle("Are you sure you want to close this ticket?")
+            .setDescription("This will generate a transcript and delete the channel.");
+
+        await message.channel.send({
+            embeds: [embed],
+            components: [confirmButtons()]
+        });
+
+        return;
+    }
+});
+
+// =========================
+// LOGIN
+// =========================
+
+client.login(process.env.TOKEN);
+
+console.log("WhiteCastle Support System — FULL FINAL BUILD LOADED");
